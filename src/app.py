@@ -311,6 +311,30 @@ def dashboard():
     )
 
     total_expenses = sum(expense.amount for expense in expenses)
+    
+    category_totals = {}
+
+    for expense in expenses:
+        category = expense.category
+
+        if category in category_totals:
+            category_totals[category] += expense.amount
+        else:
+            category_totals[category] = expense.amount
+
+    highest_category = None
+    highest_category_total = 0
+    recommendation = "Add expenses to receive a spending recommendation."
+
+    if category_totals:
+        highest_category = max(category_totals, key=category_totals.get)
+        highest_category_total = category_totals[highest_category]
+
+        recommendation = (
+            f"Your highest spending category is {highest_category}. "
+            "Review this category for possible savings."
+        )
+
 
     return render_template_string(
     """
@@ -340,6 +364,35 @@ def dashboard():
                     ${{ "%.2f"|format(total_expenses) }}
                 </p>
             </div>
+
+            <div class="summary-card">
+    <h2>Spending Analysis</h2>
+
+    {% if category_totals %}
+        <h3>Spending by Category</h3>
+
+        <ul>
+            {% for category, amount in category_totals.items() %}
+                <li>
+                    {{ category }}:
+                    ${{ "%.2f"|format(amount) }}
+                </li>
+            {% endfor %}
+        </ul>
+
+        <p>
+            <strong>Highest Spending Category:</strong>
+            {{ highest_category }}
+            (${{ "%.2f"|format(highest_category_total) }})
+        </p>
+    {% endif %}
+
+    <p>
+        <strong>Recommendation:</strong>
+        {{ recommendation }}
+    </p>
+</div>
+            
 
             <a class="button" href="/add-expense">
                 Add New Expense
@@ -391,9 +444,16 @@ def dashboard():
     </body>
     </html>
     """,
+    
     expenses=expenses,
     total_expenses=total_expenses,
+    category_totals=category_totals,
+    highest_category=highest_category,
+    highest_category_total=highest_category_total,
+    recommendation=recommendation,
 )
+
+
     return render_template_string(
         """
         <h1>Dashboard</h1>
