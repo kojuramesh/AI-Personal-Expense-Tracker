@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Dashboard | AI Expense Tracker</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="dashboard-body">
+
+    <header class="top-navigation">
+        <div class="navigation-content">
+            <a class="brand" href="{{ url_for('dashboard') }}">
+                <span class="brand-icon">$</span>
+
+                <span>
+                    <strong>SmartSpend</strong>
+                    <small>AI Expense Tracker</small>
+                </span>
+            </a>
+
+            <div class="user-navigation">
+                <div class="user-details">
+                    <span class="user-avatar">
+                        {{ current_user.name[0]|upper }}
+                    </span>
+
+                    <span class="user-name">
+                        {{ current_user.name }}
+                    </span>
+                </div>
+
+                <a
+                    class="logout-button"
+                    href="{{ url_for('logout') }}"
+                >
+                    Logout
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-container">
+
+        <section class="dashboard-heading">
+            <div>
+                <p class="eyebrow">FINANCIAL OVERVIEW</p>
+
+                <h1>Welcome back, {{ current_user.name }}!</h1>
+
+                <p>
+                    Review your expenses and identify opportunities
+                    to improve your spending habits.
+                </p>
+            </div>
+
+            <a
+                class="primary-button"
+                href="{{ url_for('add_expense') }}"
+            >
+                <span class="button-symbol">+</span>
+                Add Expense
+            </a>
+        </section>
+
+        <section class="statistics-grid">
+
+            <article class="stat-card">
+                <div class="stat-card-heading">
+                    <span>Total Spending</span>
+                    <span class="stat-icon">$</span>
+                </div>
+
+                <h2>${{ "%.2f"|format(total_expenses) }}</h2>
+
+                <p>
+                    Across {{ expenses|length }}
+                    {% if expenses|length == 1 %}
+                        transaction
+                    {% else %}
+                        transactions
+                    {% endif %}
+                </p>
+            </article>
+
+            <article class="stat-card">
+                <div class="stat-card-heading">
+                    <span>Top Category</span>
+                    <span class="stat-icon">↗</span>
+                </div>
+
+                {% if highest_category %}
+                    <h2>{{ highest_category }}</h2>
+
+                    <p>
+                        ${{ "%.2f"|format(highest_category_total) }}
+                        spent
+                    </p>
+                {% else %}
+                    <h2>No data</h2>
+                    <p>Add an expense to begin.</p>
+                {% endif %}
+            </article>
+
+            <article class="stat-card">
+                <div class="stat-card-heading">
+                    <span>Categories Used</span>
+                    <span class="stat-icon">#</span>
+                </div>
+
+                <h2>{{ category_totals|length }}</h2>
+
+                <p>
+                    Spending categories currently represented
+                </p>
+            </article>
+
+        </section>
+
+        <section class="analytics-grid">
+
+            <article class="content-card chart-card">
+                <div class="card-heading">
+                    <div>
+                        <p class="eyebrow">ANALYTICS</p>
+                        <h2>Spending by Category</h2>
+                    </div>
+                </div>
+
+                {% if category_totals %}
+                    <div class="chart-wrapper">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">▥</div>
+                        <h3>No spending data yet</h3>
+                        <p>
+                            Add your first expense to generate a
+                            category chart.
+                        </p>
+                    </div>
+                {% endif %}
+            </article>
+
+            <article class="content-card insight-card">
+                <div class="card-heading">
+                    <div>
+                        <p class="eyebrow">SMART INSIGHT</p>
+                        <h2>Recommendation</h2>
+                    </div>
+                </div>
+
+                <div class="recommendation-box">
+                    <div class="recommendation-icon">✦</div>
+
+                    <p>{{ recommendation }}</p>
+                </div>
+
+                {% if category_totals %}
+                    <div class="category-breakdown">
+                        <h3>Category Breakdown</h3>
+
+                        {% for category, amount in category_totals.items() %}
+                            <div class="category-row">
+                                <span>{{ category }}</span>
+
+                                <strong>
+                                    ${{ "%.2f"|format(amount) }}
+                                </strong>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </article>
+
+        </section>
+
+        <section class="content-card expense-section">
+
+            <div class="expense-header">
+                <div>
+                    <p class="eyebrow">TRANSACTIONS</p>
+                    <h2>Recent Expenses</h2>
+                </div>
+
+                <span class="record-count">
+                    {{ expenses|length }}
+                    {% if expenses|length == 1 %}
+                        record
+                    {% else %}
+                        records
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if expenses %}
+                <div class="table-wrapper">
+                    <table class="expense-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th>Amount</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for expense in expenses %}
+                                <tr>
+                                    <td>
+                                        {{ expense.expense_date.strftime("%b %d, %Y") }}
+                                    </td>
+
+                                    <td>
+                                        <span class="category-badge">
+                                            {{ expense.category }}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        {{ expense.description or "No description" }}
+                                    </td>
+
+                                    <td class="amount-cell">
+                                        ${{ "%.2f"|format(expense.amount) }}
+                                    </td>
+
+                                    <td>
+                                        <form
+                                            method="POST"
+                                            action="{{ url_for(
+                                                'delete_expense',
+                                                expense_id=expense.id
+                                            ) }}"
+                                            onsubmit="return confirm(
+                                                'Delete this expense?'
+                                            );"
+                                        >
+                                            <button
+                                                class="delete-button"
+                                                type="submit"
+                                            >
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">+</div>
+                    <h3>No expenses have been added</h3>
+
+                    <p>
+                        Add your first expense to begin tracking
+                        your spending.
+                    </p>
+
+                    <a
+                        class="primary-button"
+                        href="{{ url_for('add_expense') }}"
+                    >
+                        Add First Expense
+                    </a>
+                </div>
+            {% endif %}
+
+        </section>
+
+    </main>
+
+    {% if category_totals %}
+        <script>
+            const categoryLabels = {{ category_totals.keys() | list | tojson }};
+            const categoryValues = {{ category_totals.values() | list | tojson }};
+
+            const chartCanvas = document.getElementById("categoryChart");
+
+            new Chart(chartCanvas, {
+                type: "doughnut",
+
+                data: {
+                    labels: categoryLabels,
+
+                    datasets: [
+                        {
+                            label: "Amount Spent",
+                            data: categoryValues,
+                            backgroundColor: [
+                                "#2563eb",
+                                "#7c3aed",
+                                "#0891b2",
+                                "#16a34a",
+                                "#f59e0b",
+                                "#ea580c",
+                                "#db2777",
+                                "#64748b"
+                            ],
+                            borderColor: "#ffffff",
+                            borderWidth: 4,
+                            hoverOffset: 8
+                        }
+                    ]
+                },
+
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+
+                    cutout: "65%",
+
+                    plugins: {
+                        legend: {
+                            position: "bottom",
+
+                            labels: {
+                                usePointStyle: true,
+                                padding: 18,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const amount = Number(
+                                        context.raw
+                                    ).toLocaleString(
+                                        "en-US",
+                                        {
+                                            style: "currency",
+                                            currency: "USD"
+                                        }
+                                    );
+
+                                    return `${context.label}: ${amount}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        </script>
+    {% endif %}
+
+</body>
+</html>
