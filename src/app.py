@@ -1,6 +1,15 @@
 from datetime import date
 
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import (
+    Flask,
+    redirect,
+    render_template,
+    render_template_string,
+    request,
+    url_for,
+)
+
+
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -312,105 +321,49 @@ def dashboard():
 
     total_expenses = sum(expense.amount for expense in expenses)
 
-    return render_template_string(
-    """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>AI Expense Tracker</title>
+    category_totals = {}
 
-        <link
-            rel="stylesheet"
-            href="{{ url_for('static', filename='style.css') }}"
-        >
-    </head>
+    for expense in expenses:
+        category = expense.category
 
-    <body>
-        <div class="container">
+        if category in category_totals:
+            category_totals[category] += expense.amount
+        else:
+            category_totals[category] = expense.amount
 
-            <h1>Personal Expense Dashboard</h1>
+    highest_category = None
+    highest_category_total = 0
 
-            <p>Welcome, {{ current_user.name }}!</p>
-            <p>You are securely logged in.</p>
+    recommendation = (
+        "Add expenses to receive a personalized spending recommendation."
+    )
 
-            <div class="summary-card">
-                <h2>Expense Summary</h2>
-                <p>
-                    <strong>Total Expenses:</strong>
-                    ${{ "%.2f"|format(total_expenses) }}
-                </p>
-            </div>
+    if category_totals:
+        highest_category = max(
+            category_totals,
+            key=category_totals.get,
+        )
 
-            <a class="button" href="/add-expense">
-                Add New Expense
-            </a>
+        highest_category_total = category_totals[highest_category]
 
-            <h2>Your Expenses</h2>
+        highest_percentage = (
+            highest_category_total / total_expenses
+        ) * 100
 
-            {% if expenses %}
-                <table>
-                    <tr>
-                        <th>Date</th>
-                        <th>Category</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                        <th>Action</th>
-                    </tr>
+        recommendation = (
+            f"{highest_category} is your highest spending category, "
+            f"representing {highest_percentage:.1f}% of your total "
+            "expenses. Review this category for possible savings."
+        )
 
-                    {% for expense in expenses %}
-                    <tr>
-                        <td>{{ expense.expense_date }}</td>
-                        <td>{{ expense.category }}</td>
-                        <td>{{ expense.description }}</td>
-                        <td>${{ "%.2f"|format(expense.amount) }}</td>
-                        <td>
-                            <form
-                                method="POST"
-                                action="{{ url_for('delete_expense', expense_id=expense.id) }}"
-                            >
-                                <button
-                                    class="delete-button"
-                                    type="submit"
-                                >
-                                    Delete
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            {% else %}
-                <p>No expenses have been added yet.</p>
-            {% endif %}
-
-            <br><br>
-
-            <a href="/logout">Logout</a>
-
-        </div>
-    </body>
-    </html>
-    """,
-    expenses=expenses,
-    total_expenses=total_expenses,
-)
-    return render_template_string(
-        """
-        <h1>Dashboard</h1>
-
-        <p>Welcome, {{ current_user.name }}!</p>
-        <p>You are securely logged in.</p>
-
-        <h2>Initial Prototype Status</h2>
-        <ul>
-            <li>User registration: Working</li>
-            <li>Secure password hashing: Working</li>
-            <li>User login: Working</li>
-            <li>Protected dashboard: Working</li>
-        </ul>
-
-        <p><a href="/logout">Logout</a></p>
-        """
+    return render_template(
+        "dashboard.html",
+        expenses=expenses,
+        total_expenses=total_expenses,
+        category_totals=category_totals,
+        highest_category=highest_category,
+        highest_category_total=highest_category_total,
+        recommendation=recommendation,
     )
 
 @app.route("/add-expense", methods=["GET", "POST"])
