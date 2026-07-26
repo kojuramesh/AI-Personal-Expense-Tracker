@@ -95,10 +95,11 @@ def home():
                 </p>
 
                 <div class="summary-card">
-                    <h2>Initial Prototype</h2>
+                    <h2>Integrated Expense Management System</h2>
                     <p>
-                        This version includes secure user authentication,
-                        expense management, and an SQLite database.
+                        A secure web application for tracking expenses,
+                        analyzing spending patterns, and visualizing 
+                        personal financial data.
                     </p>
                 </div>
 
