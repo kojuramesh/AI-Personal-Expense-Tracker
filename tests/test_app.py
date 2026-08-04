@@ -339,3 +339,175 @@ def test_user_cannot_delete_another_users_expense(client):
     with app.app_context():
         protected_expense = db.session.get(Expense, expense_id)
         assert protected_expense is not None
+
+def test_edit_expense_updates_record_and_dashboard(client):
+    register_user(client)
+    login_user(client)
+
+    client.post(
+        "/add-expense",
+        data={
+            "amount": "50.00",
+            "category": "Food",
+            "description": "Original expense",
+            "expense_date": "2026-08-01",
+        },
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        expense = Expense.query.filter_by(
+            description="Original expense"
+        ).first()
+
+        assert expense is not None
+        expense_id = expense.id
+
+    response = client.post(
+        f"/edit-expense/{expense_id}",
+        data={
+            "amount": "85.25",
+            "category": "Shopping",
+            "description": "Updated expense",
+            "expense_date": "2026-08-02",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b"Updated expense" in response.data
+    assert b"$85.25" in response.data
+    assert b"Shopping" in response.data
+    assert b"Original expense" not in response.data
+
+    with app.app_context():
+        updated_expense = db.session.get(Expense, expense_id)
+
+        assert updated_expense is not None
+        assert updated_expense.amount == 85.25
+        assert updated_expense.category == "Shopping"
+        assert updated_expense.description == "Updated expense"
+        assert updated_expense.expense_date.isoformat() == "2026-08-02"
+
+
+def test_user_cannot_edit_another_users_expense(client):
+    register_user(
+        client,
+        name="First User",
+        email="first-edit@example.com",
+        password="password123",
+    )
+
+    login_user(
+        client,
+        email="first-edit@example.com",
+        password="password123",
+    )
+
+    client.post(
+        "/add-expense",
+        data={
+            "amount": "110.00",
+            "category": "Utilities",
+            "description": "Protected edit expense",
+            "expense_date": "2026-08-01",
+        },
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        expense = Expense.query.filter_by(
+            description="Protected edit expense"
+        ).first()
+
+        assert expense is not None
+        expense_id = expense.id
+
+    client.get("/logout", follow_redirects=True)
+
+    register_user(
+        client,
+        name="Second User",
+        email="second-edit@example.com",
+        password="password456",
+    )
+
+    login_user(
+        client,
+        email="second-edit@example.com",
+        password="password456",
+    )
+
+    response = client.get(
+        f"/edit-expense/{expense_id}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 404
+
+    with app.app_context():
+        protected_expense = db.session.get(Expense, expense_id)
+
+        assert protected_expense is not None
+        assert protected_expense.description == "Protected edit expense"
+
+
+def test_month_filter_displays_only_selected_month(client):
+    register_user(client)
+    login_user(client)
+
+    expenses = [
+        {
+            "amount": "100.00",
+            "category": "Food",
+            "description": "July groceries",
+            "expense_date": "2026-07-15",
+        },
+        {
+            "amount": "75.00",
+            "category": "Transportation",
+            "description": "August gas",
+            "expense_date": "2026-08-10",
+        },
+    ]
+
+    for expense in expenses:
+        client.post(
+            "/add-expense",
+            data=expense,
+            follow_redirects=True,
+        )
+
+    response = client.get("/dashboard?month=2026-07")
+
+    assert response.status_code == 200
+    assert b"July groceries" in response.data
+    assert b"$100.00" in response.data
+    assert b"August gas" not in response.data
+    assert b"July 2026" in response.data
+    assert b"Monthly Spending" in response.data
+
+
+def test_dashboard_contains_interactive_chart_filter_hooks(client):
+    register_user(client)
+    login_user(client)
+
+    client.post(
+        "/add-expense",
+        data={
+            "amount": "45.00",
+            "category": "Food",
+            "description": "Chart filter test",
+            "expense_date": "2026-08-01",
+        },
+        follow_redirects=True,
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b'data-category="Food"' in response.data
+    assert b'id="clearCategoryFilter"' in response.data
+    assert b'id="categoryFilterStatus"' in response.data
+    assert b"filterExpensesByCategory" in response.data
+    assert b"Showing all categories" in response.data
