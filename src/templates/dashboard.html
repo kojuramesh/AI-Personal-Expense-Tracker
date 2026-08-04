@@ -75,18 +75,77 @@
             </a>
         </section>
 
+        <section class="dashboard-filter">
+            <form
+                class="month-filter-form"
+                method="GET"
+                action="{{ url_for('dashboard') }}"
+            >
+                <div>
+                    <label for="month">
+                        Filter expenses by month
+                    </label>
+
+                    <select id="month" name="month">
+                        <option value="">
+                            All months
+                        </option>
+
+                        {% for month in available_months %}
+                            <option
+                                value="{{ month }}"
+                                {% if selected_month == month %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ month }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button
+                    class="filter-button"
+                    type="submit"
+                >
+                    Apply Filter
+                </button>
+
+                {% if selected_month %}
+                    <a
+                        class="clear-filter-button"
+                        href="{{ url_for('dashboard') }}"
+                    >
+                        Clear Filter
+                    </a>
+                {% endif %}
+            </form>
+
+            <p class="filter-summary">
+                Showing results for:
+                <strong>{{ selected_month_label }}</strong>
+            </p>
+        </section>
+
         <section class="statistics-grid">
 
             <article class="stat-card">
                 <div class="stat-card-heading">
-                    <span>Total Spending</span>
+                    <span>
+                        {% if selected_month %}
+                            Monthly Spending
+                        {% else %}
+                            Total Spending
+                        {% endif %}
+                    </span>
                     <span class="stat-icon">$</span>
                 </div>
 
                 <h2>${{ "%.2f"|format(total_expenses) }}</h2>
 
                 <p>
-                    Across {{ expenses|length }}
+                    {{ selected_month_label }} ·
+                    {{ expenses|length }}
                     {% if expenses|length == 1 %}
                         transaction
                     {% else %}
@@ -190,20 +249,51 @@
 
         <section class="content-card expense-section">
 
+
+
             <div class="expense-header">
                 <div>
                     <p class="eyebrow">TRANSACTIONS</p>
-                    <h2>Recent Expenses</h2>
+
+                    <h2>
+                        {% if selected_month %}
+                            Expenses for {{ selected_month_label }}
+                        {% else %}
+                            Recent Expenses
+                        {% endif %}
+                    </h2>
+
+                    <p
+                        id="categoryFilterStatus"
+                        class="category-filter-status"
+                        aria-live="polite"
+                    >
+                        Showing all categories
+                    </p>
                 </div>
 
-                <span class="record-count">
-                    {{ expenses|length }}
-                    {% if expenses|length == 1 %}
-                        record
-                    {% else %}
-                        records
-                    {% endif %}
-                </span>
+                <div class="expense-header-actions">
+                    <button
+                        id="clearCategoryFilter"
+                        class="clear-category-button"
+                        type="button"
+                        hidden
+                    >
+                        Show All Categories
+                    </button>
+
+                    <span
+                        id="visibleRecordCount"
+                        class="record-count"
+                    >
+                        {{ expenses|length }}
+                        {% if expenses|length == 1 %}
+                            record
+                        {% else %}
+                            records
+                        {% endif %}
+                    </span>
+                </div>
             </div>
 
             {% if expenses %}
@@ -221,7 +311,10 @@
 
                         <tbody>
                             {% for expense in expenses %}
-                                <tr>
+                                <tr
+                                    class="expense-row"
+                                    data-category="{{ expense.category }}"
+                                >
                                     <td>
                                         {{ expense.expense_date.strftime("%b %d, %Y") }}
                                     </td>
@@ -240,30 +333,61 @@
                                         ${{ "%.2f"|format(expense.amount) }}
                                     </td>
 
+                                    
                                     <td>
-                                        <form
-                                            method="POST"
-                                            action="{{ url_for(
-                                                'delete_expense',
-                                                expense_id=expense.id
-                                            ) }}"
-                                            onsubmit="return confirm(
-                                                'Delete this expense?'
-                                            );"
-                                        >
-                                            <button
-                                                class="delete-button"
-                                                type="submit"
+                                        <div class="expense-actions">
+                                            <a
+                                                class="edit-button"
+                                                href="{{ url_for(
+                                                    'edit_expense',
+                                                    expense_id=expense.id
+                                                ) }}"
                                             >
-                                                Delete
-                                            </button>
-                                        </form>
+                                                Edit
+                                            </a>
+
+                                            <form
+                                                method="POST"
+                                                action="{{ url_for(
+                                                    'delete_expense',
+                                                    expense_id=expense.id
+                                                ) }}"
+                                                onsubmit="return confirm(
+                                                    'Delete this expense?'
+                                                );"
+                                            >
+                                                <button
+                                                    class="delete-button"
+                                                    type="submit"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
+                                    
+                                    
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+
+                <div
+                    id="categoryEmptyState"
+                    class="empty-state category-empty-state"
+                    hidden
+                >
+                    <div class="empty-icon">⌕</div>
+
+                    <h3>No matching expenses</h3>
+
+                    <p>
+                        No expenses were found for the selected
+                        category.
+                    </p>
+                </div>
+
             {% else %}
                 <div class="empty-state">
                     <div class="empty-icon">+</div>
@@ -294,7 +418,7 @@
 
             const chartCanvas = document.getElementById("categoryChart");
 
-            new Chart(chartCanvas, {
+            const categoryChart = new Chart(chartCanvas, {
                 type: "doughnut",
 
                 data: {
@@ -326,6 +450,25 @@
                     maintainAspectRatio: false,
 
                     cutout: "65%",
+
+                    onClick: function(event, elements) {
+                        if (elements.length === 0) {
+                            return;
+                        }
+
+                        const selectedIndex = elements[0].index;
+                        const selectedCategory = categoryLabels[selectedIndex];
+
+                        filterExpensesByCategory(selectedCategory);
+                    },
+
+                    onHover: function(event, elements) {
+                        event.native.target.style.cursor = (
+                            elements.length > 0
+                                ? "pointer"
+                                : "default"
+                        );
+                    },
 
                     plugins: {
                         legend: {
@@ -360,6 +503,93 @@
                     }
                 }
             });
+            const expenseRows = Array.from(
+                document.querySelectorAll(".expense-row")
+            );
+
+            const filterStatus = document.getElementById(
+                "categoryFilterStatus"
+            );
+
+            const clearCategoryButton = document.getElementById(
+                "clearCategoryFilter"
+            );
+
+            const visibleRecordCount = document.getElementById(
+                "visibleRecordCount"
+            );
+
+            const categoryEmptyState = document.getElementById(
+                "categoryEmptyState"
+            );
+
+            const tableWrapper = document.querySelector(
+                ".table-wrapper"
+            );
+
+            let activeCategory = null;
+
+            function updateVisibleRecordCount(count) {
+                visibleRecordCount.textContent = (
+                    count === 1
+                        ? "1 record"
+                        : `${count} records`
+                );
+            }
+
+            function filterExpensesByCategory(category) {
+                if (activeCategory === category) {
+                    showAllCategories();
+                    return;
+                }
+
+                activeCategory = category;
+                let visibleCount = 0;
+
+                expenseRows.forEach(function(row) {
+                    const rowCategory = row.dataset.category;
+                    const shouldDisplay = rowCategory === category;
+
+                    row.hidden = !shouldDisplay;
+
+                    if (shouldDisplay) {
+                        visibleCount += 1;
+                    }
+                });
+
+                filterStatus.textContent = (
+                    `Showing ${category} expenses only`
+                );
+
+                clearCategoryButton.hidden = false;
+                updateVisibleRecordCount(visibleCount);
+
+                const hasMatchingRows = visibleCount > 0;
+
+                tableWrapper.hidden = !hasMatchingRows;
+                categoryEmptyState.hidden = hasMatchingRows;
+            }
+
+            function showAllCategories() {
+                activeCategory = null;
+
+                expenseRows.forEach(function(row) {
+                    row.hidden = false;
+                });
+
+                filterStatus.textContent = "Showing all categories";
+                clearCategoryButton.hidden = true;
+
+                updateVisibleRecordCount(expenseRows.length);
+
+                tableWrapper.hidden = false;
+                categoryEmptyState.hidden = true;
+            }
+
+            clearCategoryButton.addEventListener(
+                "click",
+                showAllCategories
+            );
         </script>
     {% endif %}
 

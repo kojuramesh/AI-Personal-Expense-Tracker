@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from flask import (
     Flask,
@@ -313,14 +313,66 @@ def login():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    expenses = (
+    selected_month = request.args.get("month", "").strip()
+
+    all_expenses = (
         Expense.query
         .filter_by(user_id=current_user.id)
         .order_by(Expense.expense_date.desc())
         .all()
     )
 
-    total_expenses = sum(expense.amount for expense in expenses)
+    available_months = sorted(
+        {
+            expense.expense_date.strftime("%Y-%m")
+            for expense in all_expenses
+        },
+        reverse=True,
+    )
+
+    expenses = all_expenses
+    selected_month_label = "All Time"
+
+    if selected_month:
+        try:
+            month_start = datetime.strptime(
+                selected_month,
+                "%Y-%m",
+            ).date()
+
+            if month_start.month == 12:
+                next_month_start = date(
+                    month_start.year + 1,
+                    1,
+                    1,
+                )
+            else:
+                next_month_start = date(
+                    month_start.year,
+                    month_start.month + 1,
+                    1,
+                )
+
+            expenses = [
+                expense
+                for expense in all_expenses
+                if (
+                    month_start
+                    <= expense.expense_date
+                    < next_month_start
+                )
+            ]
+
+            selected_month_label = month_start.strftime("%B %Y")
+
+        except ValueError:
+            selected_month = ""
+            selected_month_label = "All Time"
+
+    total_expenses = sum(
+        expense.amount
+        for expense in expenses
+    )
 
     category_totals = {}
 
@@ -339,7 +391,12 @@ def dashboard():
         "Add expenses to receive a personalized spending recommendation."
     )
 
-    if category_totals:
+    if selected_month and not expenses:
+        recommendation = (
+            f"No expenses were recorded for {selected_month_label}."
+        )
+
+    elif category_totals:
         highest_category = max(
             category_totals,
             key=category_totals.get,
@@ -365,7 +422,11 @@ def dashboard():
         highest_category=highest_category,
         highest_category_total=highest_category_total,
         recommendation=recommendation,
+        available_months=available_months,
+        selected_month=selected_month,
+        selected_month_label=selected_month_label,
     )
+
 
 @app.route("/add-expense", methods=["GET", "POST"])
 @login_required
@@ -470,6 +531,123 @@ def add_expense():
         </html>
         """
     )
+
+@app.route("/edit-expense/<int:expense_id>", methods=["GET", "POST"])
+@login_required
+def edit_expense(expense_id):
+    expense = Expense.query.filter_by(
+        id=expense_id,
+        user_id=current_user.id,
+    ).first_or_404()
+
+    if request.method == "POST":
+        expense.amount = float(request.form["amount"])
+        expense.category = request.form["category"]
+        expense.description = request.form["description"].strip()
+        expense.expense_date = date.fromisoformat(
+            request.form["expense_date"]
+        )
+
+        db.session.commit()
+
+        return redirect(url_for("dashboard"))
+
+    return render_template_string(
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Edit Expense - AI Expense Tracker</title>
+
+            <link
+                rel="stylesheet"
+                href="{{ url_for('static', filename='style.css') }}"
+            >
+        </head>
+
+        <body>
+            <div class="container">
+
+                <h1>Edit Expense</h1>
+                <p>Update the expense information below.</p>
+
+                <form method="POST">
+                    <label>Amount:</label><br>
+                    <input
+                        type="number"
+                        name="amount"
+                        step="0.01"
+                        min="0.01"
+                        value="{{ '%.2f'|format(expense.amount) }}"
+                        required
+                    >
+                    <br><br>
+
+                    <label>Category:</label><br>
+                    <select name="category" required>
+                        {% set categories = [
+                            "Food",
+                            "Housing",
+                            "Transportation",
+                            "Utilities",
+                            "Entertainment",
+                            "Healthcare",
+                            "Shopping",
+                            "Other"
+                        ] %}
+
+                        {% for category in categories %}
+                            <option
+                                value="{{ category }}"
+                                {% if expense.category == category %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ category }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <br><br>
+
+                    <label>Description:</label><br>
+                    <input
+                        type="text"
+                        name="description"
+                        value="{{ expense.description or '' }}"
+                        placeholder="Example: Grocery shopping"
+                    >
+                    <br><br>
+
+                    <label>Date:</label><br>
+                    <input
+                        type="date"
+                        name="expense_date"
+                        value="{{ expense.expense_date.isoformat() }}"
+                        required
+                    >
+                    <br><br>
+
+                    <button class="button" type="submit">
+                        Save Changes
+                    </button>
+                </form>
+
+                <br>
+
+                <a href="{{ url_for('dashboard') }}">
+                    ← Cancel and Return to Dashboard
+                </a>
+
+            </div>
+        </body>
+        </html>
+        """,
+        expense=expense,
+    )
+
+
+
+
 @app.route("/delete-expense/<int:expense_id>", methods=["POST"])
 @login_required
 def delete_expense(expense_id):
